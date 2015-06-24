@@ -1,9 +1,23 @@
+// WebRelay Module by lucadentella https://github.com/lucadentella/enc28j60_tutorial/blob/master/_9_WebRelay
+// Fixed and re-edited for HIGHasLOW relay boards and added DHCP support by smntsn
+// For one relay module. 
+
 #include <EtherCard.h>
+#include <IPAddress.h>
+#define RELAY_PIN  2
 
-#define RELAY_PIN	2
+// DHCP Support starts here
+#define STATIC 0  // set to 1 to disable DHCP (adjust myip/gwip values below)
 
-static byte mymac[]  = {0xDD,0xDD,0xDD,0x00,0x00,0x01};
-static byte myip[]   = {192,168,1,2};
+#if STATIC 
+// ethernet interface ip address
+static byte myip[] = { 192,168,1,200 };
+// gateway ip address
+static byte gwip[] = { 192,168,1,1 };
+#endif
+
+static byte mymac[] = { 0x70,0x69,0x69,0x2D,0x30,0x31 };
+// static byte myip[]   = {192,168,1,113};
 byte Ethernet::buffer[700];
 
 char* on  = "ON";
@@ -18,17 +32,20 @@ void setup () {
   Serial.begin(57600);
   Serial.println("WebRelay Demo");
 
-  if(!ether.begin(sizeof Ethernet::buffer, mymac, 10))
+  if (ether.begin(sizeof Ethernet::buffer, mymac) == 0) 
     Serial.println( "Failed to access Ethernet controller");
-  else
-    Serial.println("Ethernet controller initialized");
+#if STATIC
+  ether.staticSetup(myip, gwip);
+#else
+  if (!ether.dhcpSetup())
+    Serial.println("DHCP failed");
+#endif
 
-  if(!ether.staticSetup(myip))
-    Serial.println("Failed to set IP address");
+    ether.printIp("IP:  ", ether.myip);
 
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW);  
-  relayStatus = false;
+  digitalWrite(RELAY_PIN, HIGH);  
+  relayStatus = true;
   relayLabel = off;
   linkLabel = on;
 }
@@ -41,16 +58,16 @@ void loop() {
   if(pos) {
         
     if(strstr((char *)Ethernet::buffer + pos, "GET /?ON") != 0) {
-      relayStatus = true;
+      relayStatus = false;
       relayLabel = on;
       linkLabel = off;
     } else if(strstr((char *)Ethernet::buffer + pos, "GET /?OFF") != 0) {
-      relayStatus = false;
+      relayStatus = true;
       relayLabel = off;
       linkLabel = on;
     }
     digitalWrite(RELAY_PIN, relayStatus); 
-		
+    
     BufferFiller bfill = ether.tcpOffset();
     bfill.emit_p(PSTR("HTTP/1.0 200 OK\r\n"
       "Content-Type: text/html\r\nPragma: no-cache\r\n\r\n"
